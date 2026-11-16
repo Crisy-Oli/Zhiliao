@@ -22,6 +22,14 @@ public class NavButton implements IHook {
 
     @Override
     public void init(ClassLoader classLoader) throws Throwable {
+        if (!Helper.prefs.getBoolean("switch_mainswitch", false)
+                || !(Helper.prefs.getBoolean("switch_vipnav", false)
+                    || Helper.prefs.getBoolean("switch_videonav", false)
+                    || Helper.prefs.getBoolean("switch_friendnav", false)
+                    || Helper.prefs.getBoolean("switch_panelnav", false)
+                    || Helper.prefs.getBoolean("switch_findnav", false)))
+            return;
+
         Class<?> navView = classLoader.loadClass("com.zhihu.android.bottomnav.core.BottomNavMenuView");
         Class<?> tabClass = classLoader.loadClass("com.google.android.material.tabs.TabLayout$Tab");
 
