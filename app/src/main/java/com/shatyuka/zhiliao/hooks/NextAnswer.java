@@ -31,6 +31,10 @@ public class NextAnswer implements IHook {
 
     @Override
     public void init(ClassLoader classLoader) throws Throwable {
+        if (!Helper.prefs.getBoolean("switch_mainswitch", false)
+                || !Helper.prefs.getBoolean("switch_nextanswer", false))
+            return;
+
         if (Helper.versionCode > 2614) {
             NextContentAnimationView = classLoader.loadClass("com.zhihu.android.mix.widget.NextContentAnimationView");
             try {
