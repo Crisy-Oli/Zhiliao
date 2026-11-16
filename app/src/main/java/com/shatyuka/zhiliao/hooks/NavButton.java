@@ -6,18 +6,14 @@ import com.shatyuka.zhiliao.Helper;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.Arrays;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 
 public class NavButton implements IHook {
-    static Class<?> BottomNavMenuView;
-    static Class<?> IMenuItem;
-
+    static Method addMenuTab;
     static Method getItemId;
-
-    static Field Tab_tabView;
+    static Field tabView;
 
     @Override
     public String getName() {
@@ -26,34 +22,67 @@ public class NavButton implements IHook {
 
     @Override
     public void init(ClassLoader classLoader) throws Throwable {
-        BottomNavMenuView = classLoader.loadClass("com.zhihu.android.bottomnav.core.BottomNavMenuView");
+        Class<?> navView = classLoader.loadClass("com.zhihu.android.bottomnav.core.BottomNavMenuView");
+        Class<?> tabClass = classLoader.loadClass("com.google.android.material.tabs.TabLayout$Tab");
 
-        Class<?> tabLayoutTabClass = classLoader.loadClass("com.google.android.material.tabs.TabLayout$Tab");
-        IMenuItem = Arrays.stream(BottomNavMenuView.getDeclaredMethods())
-                .filter(method -> method.getReturnType() == tabLayoutTabClass)
-                .map(method -> method.getParameterTypes()[0]).findFirst().get();
+        // There are two methods taking the same menu-item interface in 11.16.0:
+        // one returns Tab, the other is a void UI-test helper. Select by return type.
+        for (Method method : navView.getDeclaredMethods()) {
+            Class<?>[] params = method.getParameterTypes();
+            if (method.getReturnType() == tabClass && params.length == 1) {
+                addMenuTab = method;
+                break;
+            }
+        }
+        if (addMenuTab == null)
+            throw new NoSuchMethodException("BottomNavMenuView.addMenuTab");
 
-        getItemId = Arrays.stream(IMenuItem.getDeclaredMethods())
-                .filter(method -> method.getReturnType() == String.class).findFirst().get();
-
-        Tab_tabView = tabLayoutTabClass.getField("view");
+        Class<?> itemType = addMenuTab.getParameterTypes()[0];
+        // The ID getter is inherited from a parent menu-item interface in 11.16.0.
+        // getDeclaredMethods() misses it; getMethods() sees inherited methods.
+        for (Method method : itemType.getMethods()) {
+            if (method.getReturnType() == String.class
+                    && method.getParameterCount() == 0
+                    && (getItemId == null || method.getName().equals("a"))) {
+                getItemId = method;
+            }
+        }
+        if (getItemId == null)
+            throw new NoSuchMethodException("MenuItem.id");
+        tabView = tabClass.getField("view");
     }
 
     @Override
     public void hook() throws Throwable {
-        if (Helper.prefs.getBoolean("switch_mainswitch", false) && (Helper.prefs.getBoolean("switch_vipnav", false) || Helper.prefs.getBoolean("switch_videonav", false) || Helper.prefs.getBoolean("switch_friendnav", false) || Helper.prefs.getBoolean("switch_panelnav", false))) {
-            XposedBridge.hookMethod(Helper.getMethodByParameterTypes(BottomNavMenuView, IMenuItem), new XC_MethodHook() {
-                @Override
-                protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                    if (("market".equals(getItemId.invoke(param.args[0])) && Helper.prefs.getBoolean("switch_vipnav", false)) ||
-                            ("video".equals(getItemId.invoke(param.args[0])) && Helper.prefs.getBoolean("switch_videonav", false)) ||
-                            ("friend".equals(getItemId.invoke(param.args[0])) && Helper.prefs.getBoolean("switch_friendnav", false)) ||
-                            ("panel".equals(getItemId.invoke(param.args[0])) && Helper.prefs.getBoolean("switch_panelnav", false)) ||
-                            ("find".equals(getItemId.invoke(param.args[0])) && Helper.prefs.getBoolean("switch_findnav", false))) {
-                        ((View) Tab_tabView.get(param.getResult())).setVisibility(View.GONE);
-                    }
+        if (!Helper.prefs.getBoolean("switch_mainswitch", false))
+            return;
+
+        if (!(Helper.prefs.getBoolean("switch_vipnav", false)
+                || Helper.prefs.getBoolean("switch_videonav", false)
+                || Helper.prefs.getBoolean("switch_friendnav", false)
+                || Helper.prefs.getBoolean("switch_panelnav", false)
+                || Helper.prefs.getBoolean("switch_findnav", false)))
+            return;
+
+        XposedBridge.hookMethod(addMenuTab, new XC_MethodHook() {
+            @Override
+            protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                if (param.args[0] == null || param.getResult() == null)
+                    return;
+                String id = (String) getItemId.invoke(param.args[0]);
+                if (id == null)
+                    return;
+                boolean hide = ("market".equals(id) && Helper.prefs.getBoolean("switch_vipnav", false))
+                        || ("video".equals(id) && Helper.prefs.getBoolean("switch_videonav", false))
+                        || ("friend".equals(id) && Helper.prefs.getBoolean("switch_friendnav", false))
+                        || ("panel".equals(id) && Helper.prefs.getBoolean("switch_panelnav", false))
+                        || ("find".equals(id) && Helper.prefs.getBoolean("switch_findnav", false));
+                if (hide) {
+                    View view = (View) tabView.get(param.getResult());
+                    if (view != null)
+                        view.setVisibility(View.GONE);
                 }
-            });
-        }
+            }
+        });
     }
 }
