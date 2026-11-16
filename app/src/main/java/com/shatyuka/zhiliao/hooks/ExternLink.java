@@ -56,27 +56,55 @@ public class ExternLink implements IHook {
         H5Event_params.setAccessible(true);
     }
 
+    private static boolean enabled() {
+        return Helper.prefs != null
+                && Helper.prefs.getBoolean("switch_mainswitch", false)
+                && (Helper.prefs.getBoolean("switch_externlink", false)
+                    || Helper.prefs.getBoolean("switch_externlinkex", false));
+    }
+
+    private static Uri extractTarget(Uri link) {
+        if (link == null || !"link.zhihu.com".equalsIgnoreCase(link.getHost()))
+            return null;
+        String raw = link.getQueryParameter("target");
+        if (raw == null || raw.isEmpty())
+            return null;
+        Uri target = Uri.parse(raw);
+        String scheme = target.getScheme();
+        return "https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme)
+                ? target : null;
+    }
+
+    private static boolean openOutside(Uri uri) {
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            Helper.context.startActivity(intent);
+            return true;
+        } catch (RuntimeException e) {
+            XposedBridge.log("[Zhiliao] Cannot open external URL: " + e);
+            return false;
+        }
+    }
+
     @Override
     public void hook() throws Throwable {
         XposedBridge.hookMethod(shouldOverrideUrlLoading, new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) {
+                if (!enabled())
+                    return;
                 WebResourceRequest request = (WebResourceRequest) param.args[1];
-                Uri uri = request.getUrl();
-                if ("link.zhihu.com".equals(uri.getHost())) {
-                    if (Helper.prefs.getBoolean("switch_mainswitch", false) && (Helper.prefs.getBoolean("switch_externlink", false) || Helper.prefs.getBoolean("switch_externlinkex", false))) {
-                        Uri url = Uri.parse(uri.getQueryParameter("target"));
-                        if (Helper.prefs.getBoolean("switch_externlinkex", false)) {
-                            Intent intent = new Intent(Intent.ACTION_VIEW, url);
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                            Helper.context.startActivity(intent);
-                            param.setResult(true);
-                        } else {
-                            WebResourceRequestImpl request2 = new WebResourceRequestImpl(request);
-                            request2.url = url;
-                            param.args[1] = request2;
-                        }
-                    }
+                Uri target = extractTarget(request == null ? null : request.getUrl());
+                if (target == null)
+                    return;
+                if (Helper.prefs.getBoolean("switch_externlinkex", false)) {
+                    if (openOutside(target))
+                        param.setResult(true);
+                } else {
+                    WebResourceRequestImpl replacement = new WebResourceRequestImpl(request);
+                    replacement.url = target;
+                    param.args[1] = replacement;
                 }
             }
         });
@@ -84,20 +112,22 @@ public class ExternLink implements IHook {
         XposedBridge.hookMethod(openUrl, new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                JSONObject params = (JSONObject) H5Event_params.get(param.args[0]);
-                Uri uri = Uri.parse(params.optString("url"));
-                if ("link.zhihu.com".equals(uri.getHost())) {
-                    if (Helper.prefs.getBoolean("switch_mainswitch", false) && (Helper.prefs.getBoolean("switch_externlink", false) || Helper.prefs.getBoolean("switch_externlinkex", false))) {
-                        String url = uri.getQueryParameter("target");
-                        if (Helper.prefs.getBoolean("switch_externlinkex", false)) {
-                            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                            Helper.context.startActivity(intent);
-                            param.setResult(true);
-                        } else {
-                            params.put("url", url);
-                        }
+                if (!enabled() || param.args[0] == null)
+                    return;
+                Object raw = H5Event_params.get(param.args[0]);
+                if (!(raw instanceof JSONObject))
+                    return;
+                JSONObject params = (JSONObject) raw;
+                Uri target = extractTarget(Uri.parse(params.optString("url", "")));
+                if (target == null)
+                    return;
+                if (Helper.prefs.getBoolean("switch_externlinkex", false)) {
+                    if (openOutside(target)) {
+                        // BasePlugin2.openUrl(H5Event) returns void, not boolean.
+                        param.setResult(null);
                     }
+                } else {
+                    params.put("url", target.toString());
                 }
             }
         });
@@ -105,19 +135,16 @@ public class ExternLink implements IHook {
         XposedBridge.hookMethod(openUrl2, new XC_MethodHook() {
             @Override
             protected void beforeHookedMethod(MethodHookParam param) {
-                Uri uri = (Uri) param.args[1];
-                if ("link.zhihu.com".equals(uri.getHost())) {
-                    if (Helper.prefs.getBoolean("switch_mainswitch", false) && (Helper.prefs.getBoolean("switch_externlink", false) || Helper.prefs.getBoolean("switch_externlinkex", false))) {
-                        String url = uri.getQueryParameter("target");
-                        if (Helper.prefs.getBoolean("switch_externlinkex", false)) {
-                            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                            Helper.context.startActivity(intent);
-                            param.setResult(true);
-                        } else {
-                            param.args[1] = Uri.parse(url);
-                        }
-                    }
+                if (!enabled())
+                    return;
+                Uri target = extractTarget((Uri) param.args[1]);
+                if (target == null)
+                    return;
+                if (Helper.prefs.getBoolean("switch_externlinkex", false)) {
+                    if (openOutside(target))
+                        param.setResult(true);
+                } else {
+                    param.args[1] = target;
                 }
             }
         });
