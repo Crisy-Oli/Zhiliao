@@ -17,6 +17,10 @@ public class ThirdPartyLogin implements IHook {
 
     @Override
     public void init(ClassLoader classLoader) throws Throwable {
+        if (!Helper.prefs.getBoolean("switch_mainswitch", false)
+                || !Helper.prefs.getBoolean("switch_thirdpartylogin", false))
+            return;
+
         try {
             UiConfigImpl = classLoader.loadClass("com.zhihu.android.account.provider.UiConfigImpl");
         } catch (ClassNotFoundException e) {
