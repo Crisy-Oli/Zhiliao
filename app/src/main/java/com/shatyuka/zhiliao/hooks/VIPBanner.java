@@ -30,6 +30,10 @@ public class VIPBanner implements IHook {
 
     @Override
     public void init(ClassLoader classLoader) throws Throwable {
+        if (!Helper.prefs.getBoolean("switch_mainswitch", false)
+                || !Helper.prefs.getBoolean("switch_vipbanner", false))
+            return;
+
         try {
             VipEntranceView = classLoader.loadClass("com.zhihu.android.app.ui.fragment.more.more.widget.VipEntranceView");
             initView = VipEntranceView.getDeclaredMethod("a", Context.class);
