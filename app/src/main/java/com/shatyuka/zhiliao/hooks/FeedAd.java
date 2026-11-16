@@ -79,6 +79,37 @@ public class FeedAd implements IHook {
                 }
             }
         });
+        // Zhihu 11.16.0 routes feed placements through these newer resolvers.
+        // Keep the legacy resolver below as a fallback for older versions.
+        try {
+            XposedHelpers.findAndHookMethod(Helper.MorphAdHelper, "resolveCommonAdParam",
+                    Context.class, FeedAdvert, boolean.class, boolean.class, new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            if (Helper.prefs.getBoolean("switch_mainswitch", false)
+                                    && Helper.prefs.getBoolean("switch_feedad", true)) {
+                                param.setResult(false);
+                            }
+                        }
+                    });
+        } catch (NoSuchMethodError ignored) {
+            // Older Zhihu releases do not have this resolver.
+        }
+        try {
+            XposedHelpers.findAndHookMethod(Helper.MorphAdHelper, "resolveHotAdParam",
+                    Context.class, FeedAdvert, int.class, new XC_MethodHook() {
+                        @Override
+                        protected void beforeHookedMethod(MethodHookParam param) {
+                            if (Helper.prefs.getBoolean("switch_mainswitch", false)
+                                    && Helper.prefs.getBoolean("switch_feedad", true)) {
+                                param.setResult(false);
+                            }
+                        }
+                    });
+        } catch (NoSuchMethodError ignored) {
+            // Legacy releases have different hot-ad routing.
+        }
+
         try {
             XposedHelpers.findAndHookMethod(Helper.MorphAdHelper, "resolve", Context.class, FeedAdvert, boolean.class, Boolean.class, new XC_MethodHook() {
                 @Override
