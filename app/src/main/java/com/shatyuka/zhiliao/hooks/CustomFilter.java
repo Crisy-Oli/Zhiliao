@@ -92,96 +92,111 @@ public class CustomFilter implements IHook {
         ApiElement_text = ApiElement.getField("text");
     }
 
+    private static Object read(Field field, Object target) {
+        if (field == null || target == null || !field.getDeclaringClass().isInstance(target))
+            return null;
+        try {
+            return field.get(target);
+        } catch (IllegalAccessException e) {
+            return null;
+        }
+    }
+
+    private static String readText(Field field, Object target) {
+        Object value = read(field, target);
+        return value instanceof String ? (String) value : null;
+    }
+
     @Override
     public void hook() throws Throwable {
         XposedBridge.hookAllMethods(InnerDeserializer, "deserialize", new XC_MethodHook() {
-            @SuppressWarnings("rawtypes")
             @Override
-            protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                if (Helper.prefs.getBoolean("switch_mainswitch", false)) {
-                    Object result = param.getResult();
-                    if (result == null)
-                        return;
-                    Class<?> resultClass = result.getClass();
-                    if (result != null) {
-                        if (resultClass == ApiTemplateRoot) {
-                            String type = (String) Helper.DataUnique_type.get(ApiTemplateRoot_extra.get(result));
-                            boolean hasVideo = false;
-                            String title = "";
-                            String author = "";
-                            String content = "";
-                            Object feed_content = ApiFeedCard_feed_content.get(ApiTemplateRoot_common_card.get(result));
-                            if (feed_content != null) {
-                                hasVideo = ApiFeedContent_video.get(feed_content) != null;
+            protected void afterHookedMethod(MethodHookParam param) {
+                if (!Helper.prefs.getBoolean("switch_mainswitch", false))
+                    return;
+                Object result = param.getResult();
+                if (result == null)
+                    return;
 
-                                title = (String) ApiText_panel_text.get(ApiFeedContent_title.get(feed_content));
+                if (ApiTemplateRoot.isInstance(result)) {
+                    Object extra = read(ApiTemplateRoot_extra, result);
+                    String type = readText(Helper.DataUnique_type, extra);
+                    Object card = read(ApiTemplateRoot_common_card, result);
+                    Object feed = read(ApiFeedCard_feed_content, card);
 
-                                Object sourceLine = ApiFeedContent_sourceLine.get(feed_content);
-                                List elements = (List) ApiLine_elements.get(sourceLine);
-                                author = (String) ApiText_panel_text.get(ApiElement_text.get(elements.get(1)));
+                    boolean hasVideo = read(ApiFeedContent_video, feed) != null;
+                    String title = readText(ApiText_panel_text,
+                            read(ApiFeedContent_title, feed));
+                    String content = readText(ApiText_panel_text,
+                            read(ApiFeedContent_content, feed));
+                    String author = null;
 
-                                content = (String) ApiText_panel_text.get(ApiFeedContent_content.get(feed_content));
+                    Object sourceLine = read(ApiFeedContent_sourceLine, feed);
+                    Object lineItems = read(ApiLine_elements, sourceLine);
+                    if (lineItems instanceof List) {
+                        List<?> entries = (List<?>) lineItems;
+                        if (entries.size() > 1)
+                            author = readText(ApiText_panel_text,
+                                    read(ApiElement_text, entries.get(1)));
+                    }
+                    if (filter(type, hasVideo, title, author, content))
+                        param.setResult(null);
+                } else if (Card != null && Card.isInstance(result)) {
+                    String type = readText(Card_Extra_contentType,
+                            read(Card_extra, result));
+                    boolean hasVideo = false;
+                    String title = null;
+                    String author = null;
+                    String content = null;
+
+                    Object rawElements = read(Card_elements, result);
+                    if (rawElements instanceof List) {
+                        for (Object element : (List<?>) rawElements) {
+                            if (element == null)
+                                continue;
+                            if (Video != null && Video.isInstance(element))
+                                hasVideo = true;
+
+                            String id = readText(Element_id, element);
+                            if (id == null)
+                                continue;
+                            if (title == null && author == null
+                                    && "Text".equals(id) && TextElement.isInstance(element)) {
+                                title = readText(TextElement_text, element);
+                                continue;
                             }
-
-                            if (filter(type, hasVideo, title, author, content)) {
-                                param.setResult(null);
-                            }
-                        } else if (resultClass == Card) {
-                            Object extra = Card_extra.get(result);
-                            String type = (String) Card_Extra_contentType.get(extra);
-                            boolean hasVideo = false;
-                            String title = null;
-                            String author = null;
-                            String content = null;
-                            List<?> elements = (List<?>) Card_elements.get(result);
-                            for (Object element : elements) {
-                                String id = (String) Element_id.get(element);
-                                if (id == null) {
-                                    continue;
-                                }
-                                if (title == null && author == null && id.equals("Text")) {
-                                    title = (String) TextElement_text.get(element);
-                                    continue;
-                                }
-                                if (author == null && content == null && element.getClass() == Line && id.equals("0")) {
-                                    List<?> lineElements = (List<?>) Line_elements.get(element);
-                                    if (!lineElements.isEmpty()) {
-                                        Object avatarElement = lineElements.get(0);
-                                        if (avatarElement.getClass() == Avatar) {
-                                            for (Object lineElement : lineElements) {
-                                                if (lineElement.getClass() == TextElement) {
-                                                    author = (String) TextElement_text.get(lineElement);
-                                                    break;
-                                                }
+                            if (author == null && content == null && "0".equals(id)
+                                    && Line != null && Line.isInstance(element)) {
+                                Object subItems = read(Line_elements, element);
+                                if (subItems instanceof List) {
+                                    List<?> lineElements = (List<?>) subItems;
+                                    if (!lineElements.isEmpty() && Avatar.isInstance(lineElements.get(0))) {
+                                        for (Object lineElement : lineElements) {
+                                            if (lineElement != null && TextElement.isInstance(lineElement)) {
+                                                author = readText(TextElement_text, lineElement);
+                                                break;
                                             }
-                                            continue;
                                         }
                                     }
                                 }
-                                if (content == null && id.endsWith("_summary")) {
-                                    content = (String) TextElement_text.get(element);
-                                }
-                                if (element.getClass() == Video) {
-                                    hasVideo = true;
-                                }
                             }
-
-                            if (filter(type, hasVideo, title, author, content)) {
-                                param.setResult(null);
-                            }
-                        } else if (resultClass == MarketCard) {
-                            if (Helper.prefs.getBoolean("switch_marketcard", false)) {
-                                param.setResult(null);
-                            }
+                            if (content == null && id.endsWith("_summary")
+                                    && TextElement.isInstance(element))
+                                content = readText(TextElement_text, element);
                         }
                     }
+                    if (filter(type, hasVideo, title, author, content))
+                        param.setResult(null);
+                } else if (MarketCard.isInstance(result)
+                        && Helper.prefs.getBoolean("switch_marketcard", false)) {
+                    param.setResult(null);
                 }
             }
         });
     }
 
     private boolean filter(String type, boolean hasVideo, String title, String author, String content) {
-        if (Helper.prefs.getBoolean("switch_video", false) && (type.equals("zvideo") || type.equals("drama") || hasVideo)) {
+        if (Helper.prefs.getBoolean("switch_video", false) && ("zvideo".equals(type) || "drama".equals(type) || hasVideo)) {
             return true;
         }
         if (Helper.prefs.getBoolean("switch_removearticle", false) && ("article".equals(type) || "Post".equals(type))) {
