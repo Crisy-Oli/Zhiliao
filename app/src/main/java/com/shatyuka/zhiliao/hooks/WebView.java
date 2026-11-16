@@ -52,43 +52,38 @@ public class WebView implements IHook {
             android.webkit.WebView.setWebContentsDebuggingEnabled(true);
         }
 
-        XposedHelpers.findAndHookMethod(Helper.WebViewClientWrapper, "onPageStarted", android.webkit.WebView.class, String.class, Bitmap.class, new XC_MethodHook() {
+        // Run page-specific modifications when a document is ready. The old
+        // onPageStarted injection could target a document later replaced by navigation.
+        XposedHelpers.findAndHookMethod(Helper.WebViewClientWrapper, "onPageFinished",
+                android.webkit.WebView.class, String.class, new XC_MethodHook() {
             @Override
             protected void afterHookedMethod(MethodHookParam param) {
-                boolean hideWaterMark = Helper.prefs.getBoolean("switch_mainswitch", false)
-                        && Helper.prefs.getBoolean("switch_watermark", false);
-                boolean hideSubscribe = Helper.prefs.getBoolean("switch_mainswitch", false)
-                        && Helper.prefs.getBoolean("switch_subscribe", false);
-                if (!hideWaterMark && !hideSubscribe)
+                android.webkit.WebView webview = (android.webkit.WebView) param.args[0];
+                if (webview == null)
                     return;
-                android.webkit.WebView webview = (android.webkit.WebView) param.args[0];
-                if (webview != null)
+                boolean enabled = Helper.prefs.getBoolean("switch_mainswitch", false);
+                boolean hideWaterMark = enabled && Helper.prefs.getBoolean("switch_watermark", false);
+                boolean hideSubscribe = enabled && Helper.prefs.getBoolean("switch_subscribe", false);
+                if (hideWaterMark || hideSubscribe)
                     webview.evaluateJavascript(getScript(hideWaterMark, hideSubscribe), null);
-            }
-        });
 
-        XposedHelpers.findAndHookMethod(Helper.WebViewClientWrapper, "onPageFinished", android.webkit.WebView.class, String.class, new XC_MethodHook() {
-            @Override
-            protected void afterHookedMethod(MethodHookParam param) {
-                android.webkit.WebView webview = (android.webkit.WebView) param.args[0];
                 String js = Helper.prefs.getString("edit_js", null);
-                if (webview != null && js != null && !js.isEmpty()) {
+                if (enabled && js != null && !js.isEmpty())
                     webview.evaluateJavascript(js, null);
-                }
             }
         });
     }
 
     static String getScript(boolean hideWaterMark, boolean hideSubscribe) {
         StringBuilder sb = new StringBuilder();
-        sb.append("document.addEventListener('DOMContentLoaded',(event)=>{");
+        sb.append("(function(){");
         if (hideWaterMark) {
             sb.append(script_hide_water_mark);
         }
         if (hideSubscribe) {
             sb.append(script_hide_subscribe);
         }
-        sb.append("});");
+        sb.append("})();");
         return sb.toString();
     }
 }
