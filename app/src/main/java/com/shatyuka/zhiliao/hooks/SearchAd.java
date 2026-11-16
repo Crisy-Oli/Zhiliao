@@ -15,6 +15,7 @@ public class SearchAd implements IHook {
     static Field SearchTopTabsItemList_commercialData;
     static Field PresetWords_preset;
     static Field SearchRecommendQuery_content;
+    static Field SearchRecommendQuery_commercialData;
     static Field SearchRecommendQuery_recommendQueries;
     static Field HotSearchBean_searchHotList;
 
@@ -59,6 +60,11 @@ public class SearchAd implements IHook {
                 SearchRecommendQuery_content = SearchRecommendQuery.getField("content");
             } catch (NoSuchFieldException ignored) {
             }
+            // Zhihu 11.16.0 stores sponsored search content here.
+            try {
+                SearchRecommendQuery_commercialData = SearchRecommendQuery.getField("commercialData");
+            } catch (NoSuchFieldException ignored) {
+            }
             try {
                 SearchRecommendQuery_recommendQueries = SearchRecommendQuery.getField("recommendQueries");
             } catch (NoSuchFieldException ignored) {
@@ -97,6 +103,8 @@ public class SearchAd implements IHook {
                             case "com.zhihu.android.api.model.SearchRecommendQuery": {
                                 if (SearchRecommendQuery_content != null)
                                     SearchRecommendQuery_content.set(result, null);
+                                if (SearchRecommendQuery_commercialData != null)
+                                    SearchRecommendQuery_commercialData.set(result, null);
                                 if (SearchRecommendQuery_recommendQueries != null)
                                     SearchRecommendQuery_recommendQueries.set(result, null);
                                 break;
