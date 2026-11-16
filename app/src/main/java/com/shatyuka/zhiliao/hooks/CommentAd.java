@@ -109,5 +109,23 @@ public class CommentAd implements IHook {
                 // Converter names differ across releases.
             }
         }
+
+        // Additional fallback for lists populated later by a presenter or adapter.
+        Class<?> paging = Helper.context.getClassLoader().loadClass(
+                "com.zhihu.android.app.ui.fragment.paging.BasePagingFragment");
+        XC_MethodHook beforeDisplay = new XC_MethodHook() {
+            @Override
+            protected void beforeHookedMethod(MethodHookParam param) {
+                if (param.args.length > 0) {
+                    try {
+                        filterCommentList(param.args[0]);
+                    } catch (IllegalAccessException e) {
+                        XposedBridge.log("[Zhiliao] CommentAd display filter: " + e);
+                    }
+                }
+            }
+        };
+        XposedBridge.hookAllMethods(paging, "postRefreshSucceed", beforeDisplay);
+        XposedBridge.hookAllMethods(paging, "postLoadMoreSucceed", beforeDisplay);
     }
 }
