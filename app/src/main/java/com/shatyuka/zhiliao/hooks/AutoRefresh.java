@@ -30,6 +30,10 @@ public class AutoRefresh implements IHook {
 
     @Override
     public void init(ClassLoader classLoader) throws Throwable {
+        if (!Helper.prefs.getBoolean("switch_mainswitch", false)
+                || !Helper.prefs.getBoolean("switch_autorefresh", false))
+            return;
+
         try {
             Class<?> BaseTabChildFragment = classLoader.loadClass("com.zhihu.android.app.feed.ui.fragment.BaseTabChildFragment");
             try {
