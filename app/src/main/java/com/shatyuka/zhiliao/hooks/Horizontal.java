@@ -68,9 +68,8 @@ public class Horizontal implements IHook {
                             NextBtnClickListener = clazz;
                             return true;
                         });
-                if (NextBtnClickListener == null) {
-                    throw new ClassNotFoundException("com.zhihu.android.answer.module.content.AnswerContentView$NextBtnClickListener");
-                }
+                // This optional click listener is obfuscated differently in
+                // recent versions. Other next-answer callbacks still reset state.
             }
         }
         Class<?> DirectionBoundView = classLoader.loadClass("com.zhihu.android.answer.widget.DirectionBoundView");
@@ -83,8 +82,11 @@ public class Horizontal implements IHook {
         onNestChildScrollRelease = NestChildScrollChange.getMethod("onNestChildScrollRelease", float.class, int.class);
         isReadyPageTurning = DirectionBoundView.getMethod("isReadyPageTurning");
 
-        ActionSheetLayout_callbackList = ActionSheetLayout.getDeclaredField("z");
-        ActionSheetLayout_callbackList.setAccessible(true);
+        // Zhihu 11.16.0 moved the listener list to the field "A".
+        // Match by declared type: "z" is now a boolean and caused a cast crash.
+        ActionSheetLayout_callbackList = Helper.findFieldByType(ActionSheetLayout, List.class);
+        if (ActionSheetLayout_callbackList == null)
+            throw new NoSuchFieldException("ActionSheetLayout nested-scroll listeners");
 
         if (Helper.versionCode > 2614) {
             MixPagerContainer = classLoader.loadClass("com.zhihu.android.mix.widget.MixPagerContainer");
@@ -156,9 +158,11 @@ public class Horizontal implements IHook {
                                     Math.abs(dy) < height * Helper.sensitivity &&
                                     (System.currentTimeMillis() - time) < 500 &&
                                     !scrolling) {
-                                for (Object callback : (List) Objects.requireNonNull(ActionSheetLayout_callbackList.get(param.thisObject))) {
-                                    if (callback.getClass() == NestChildScrollChange) {
-                                        onNestChildScrollRelease.invoke(callback, dx, 5201314);
+                                Object callbacks = ActionSheetLayout_callbackList.get(param.thisObject);
+                                if (callbacks instanceof List) {
+                                    for (Object callback : (List) callbacks) {
+                                        if (NestChildScrollChange.isInstance(callback))
+                                            onNestChildScrollRelease.invoke(callback, dx, 5201314);
                                     }
                                 }
                             }
@@ -203,12 +207,14 @@ public class Horizontal implements IHook {
                     }
                 }
             });
-            XposedHelpers.findAndHookMethod(NextBtnClickListener, "onClick", View.class, new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) {
-                    horizontal = false;
-                }
-            });
+            if (NextBtnClickListener != null) {
+                XposedHelpers.findAndHookMethod(NextBtnClickListener, "onClick", View.class, new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) {
+                        horizontal = false;
+                    }
+                });
+            }
             XposedHelpers.findAndHookMethod(AnswerContentView, "showNextAnswer", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
@@ -226,21 +232,32 @@ public class Horizontal implements IHook {
                     protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                         MotionEvent e = (MotionEvent) param.args[0];
                         View mixPagerContainer = (View) MixPagerContainerFragment_mixPagerContainer.get(param.thisObject);
-                        ViewParent viewPager2 = mixPagerContainer.getParent();
-                        while (viewPager2 != null && viewPager2.getClass() != ViewPager2)
+                        if (mixPagerContainer == null)
+                            return;
+                        ViewParent directParent = mixPagerContainer.getParent();
+                        if (directParent == null)
+                            return;
+                        ViewParent viewPager2 = directParent;
+                        while (viewPager2 != null && !ViewPager2.isInstance(viewPager2))
                             viewPager2 = viewPager2.getParent();
                         switch (e.getAction()) {
                             case MotionEvent.ACTION_DOWN:
                                 if (viewPager2 != null)
                                     setUserInputEnabled.invoke(viewPager2, false);
-                                mixPagerContainer.getParent().requestDisallowInterceptTouchEvent(true);
+                                directParent.requestDisallowInterceptTouchEvent(true);
                                 old_x = e.getX();
                                 old_y = e.getY();
                                 time = System.currentTimeMillis();
                                 break;
+                            case MotionEvent.ACTION_CANCEL:
+                                if (viewPager2 != null)
+                                    setUserInputEnabled.invoke(viewPager2, true);
+                                directParent.requestDisallowInterceptTouchEvent(false);
+                                break;
                             case MotionEvent.ACTION_UP:
                                 if (viewPager2 != null)
                                     setUserInputEnabled.invoke(viewPager2, true);
+                                directParent.requestDisallowInterceptTouchEvent(false);
                                 float dx = e.getX() - old_x;
                                 float dy = e.getY() - old_y;
                                 if (Math.abs(dx) > width * Helper.sensitivity &&
@@ -289,7 +306,7 @@ public class Horizontal implements IHook {
         } else if (parent instanceof View) {
             return findViewParentIfNeeds((View) parent);
         } else {
-            return parent;
+            return null;
         }
     }
 }
