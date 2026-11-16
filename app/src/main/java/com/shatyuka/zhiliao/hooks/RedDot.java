@@ -114,6 +114,12 @@ public class RedDot implements IHook {
             if (BaseBottomNavMenuItemView_setNavBadge != null)
                 XposedBridge.hookMethod(BaseBottomNavMenuItemView_setNavBadge, XC_MethodReplacement.returnConstant(null));
             XposedHelpers.findAndHookMethod(NotiMsgModel, "getUnreadCount", XC_MethodReplacement.returnConstant(0));
+            // Modern notification models expose a separate boolean unread flag.
+            try {
+                XposedHelpers.findAndHookMethod(NotiMsgModel, "hasUnreadCount",
+                        XC_MethodReplacement.returnConstant(false));
+            } catch (NoSuchMethodError ignored) {
+            }
             if (NotiUnreadCountKt_hasUnread != null)
                 XposedBridge.hookMethod(NotiUnreadCountKt_hasUnread, XC_MethodReplacement.returnConstant(false));
             if (IconWithDotAndCountView_setUnreadCount != null)
