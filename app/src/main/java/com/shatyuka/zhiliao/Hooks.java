@@ -2,6 +2,9 @@ package com.shatyuka.zhiliao;
 
 import android.widget.Toast;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.shatyuka.zhiliao.hooks.AnswerAd;
 import com.shatyuka.zhiliao.hooks.AnswerListAd;
 import com.shatyuka.zhiliao.hooks.Article;
@@ -73,15 +76,26 @@ public class Hooks {
     };
 
     public static void init(final ClassLoader classLoader) {
+        List<String> failed = new ArrayList<>();
+        int loaded = 0;
         for (IHook hook : hooks) {
             try {
                 hook.init(classLoader);
                 hook.hook();
+                loaded++;
             } catch (Throwable e) {
-                if (!Helper.prefs.getBoolean("switch_hidetoast", false))
-                    Helper.toast(hook.getName() + "功能加载失败，可能不支持当前版本知乎: " + Helper.packageInfo.versionName, Toast.LENGTH_LONG);
-                XposedBridge.log("[Zhiliao] " + e);
+                String name = hook.getName();
+                failed.add(name);
+                XposedBridge.log("[Zhiliao] Hook initialization failed: " + name + ": " + e);
+                XposedBridge.log(e);
             }
+        }
+        XposedBridge.log("[Zhiliao] Initialized " + loaded + "/" + hooks.length
+                + " hooks for Zhihu " + Helper.packageInfo.versionName);
+        if (!failed.isEmpty() && !Helper.prefs.getBoolean("switch_hidetoast", false)) {
+            // One notification avoids a long toast queue after each Zhihu launch.
+            Helper.toast(failed.size() + " 项功能未能加载，请查看 LSPosed 日志",
+                    Toast.LENGTH_LONG);
         }
     }
 }
