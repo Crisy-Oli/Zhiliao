@@ -100,7 +100,7 @@ public class NextAnswer implements IHook {
                 XposedHelpers.findAndHookMethod(View.class, "setVisibility", int.class, new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) {
-                        if (NextContentAnimationView.isAssignableFrom(param.thisObject.getClass()) || (NextContentAnimationView_short != null && NextContentAnimationView_short.isAssignableFrom(param.args[0].getClass())))
+                        if (NextContentAnimationView.isAssignableFrom(param.thisObject.getClass()) || (NextContentAnimationView_short != null && NextContentAnimationView_short.isAssignableFrom(param.thisObject.getClass())))
                             param.args[0] = View.GONE;
                     }
                 });
