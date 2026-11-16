@@ -26,6 +26,11 @@ public class NavRes implements IHook {
 
     @Override
     public void init(ClassLoader classLoader) throws Throwable {
+        if (!Helper.prefs.getBoolean("switch_mainswitch", false)
+                || !(Helper.prefs.getBoolean("switch_navres", false)
+                    || Helper.prefs.getBoolean("switch_nipple", false)))
+            return;
+
         try {
             BottomNav = classLoader.loadClass("com.zhihu.android.bottomnav.a");
             if (BottomNav.getDeclaredField("a").getType() != boolean.class)
