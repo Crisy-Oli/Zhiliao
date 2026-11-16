@@ -53,6 +53,10 @@ public class Horizontal implements IHook {
 
     @Override
     public void init(ClassLoader classLoader) throws Throwable {
+        if (!Helper.prefs.getBoolean("switch_mainswitch", false)
+                || !Helper.prefs.getBoolean("switch_horizontal", false))
+            return;
+
         ActionSheetLayout = classLoader.loadClass("com.zhihu.android.content.widget.ActionSheetLayout");
         NestChildScrollChange = classLoader.loadClass("com.zhihu.android.answer.module.content.AnswerContentView$mNestChildScrollChange$1");
         AnswerContentView = classLoader.loadClass("com.zhihu.android.answer.module.content.AnswerContentView");
