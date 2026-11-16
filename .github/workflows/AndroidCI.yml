@@ -4,6 +4,11 @@ on:
   push:
     branches: [ master, 'dev/zhihu-hook-maintenance' ]
 
+# Keep only the newest build for each branch when compatibility patches arrive rapidly.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
