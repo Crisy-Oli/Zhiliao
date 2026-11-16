@@ -6,7 +6,11 @@ import android.webkit.WebResourceResponse;
 import com.shatyuka.zhiliao.Helper;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.SequenceInputStream;
+import java.nio.charset.StandardCharsets;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
@@ -80,7 +84,6 @@ public class AnswerAd implements IHook {
                 }
             }
 
-            @SuppressWarnings("ResultOfMethodCallIgnored")
             @Override
             protected void afterHookedMethod(MethodHookParam param) {
                 if (!Helper.prefs.getBoolean("switch_mainswitch", false))
@@ -95,16 +98,27 @@ public class AnswerAd implements IHook {
                         if (response == null || response.getData() == null)
                             return;
                         try {
-                            int available = response.getData().available();
-                            if (available == 0) {
-                                available = 0x100000;
+                            InputStream stream = response.getData();
+                            ByteArrayOutputStream buffer = new ByteArrayOutputStream(8192);
+                            byte[] chunk = new byte[8192];
+                            int length;
+                            final int maxBytes = 4 * 1024 * 1024;
+                            while ((length = stream.read(chunk)) != -1) {
+                                buffer.write(chunk, 0, length);
+                                if (buffer.size() > maxBytes) {
+                                    // Large responses are left untouched. Replay the
+                                    // consumed prefix before the original stream.
+                                    response.setData(new SequenceInputStream(
+                                            new ByteArrayInputStream(buffer.toByteArray()), stream));
+                                    return;
+                                }
                             }
-                            byte[] data = new byte[available];
-                            response.getData().read(data);
-                            String content = new String(data);
-                            content = content.replace("\"searchWords\"", "\"searchWords_bak\"");
-                            content = content.replace("\"search_words\"", "\"search_words_bak\"");
-                            response.setData(new ByteArrayInputStream(content.getBytes()));
+                            byte[] original = buffer.toByteArray();
+                            String content = new String(original, StandardCharsets.UTF_8);
+                            String updated = content.replace("\"searchWords\"", "\"searchWords_bak\"")
+                                    .replace("\"search_words\"", "\"search_words_bak\"");
+                            response.setData(new ByteArrayInputStream(
+                                    content.equals(updated) ? original : updated.getBytes(StandardCharsets.UTF_8)));
                             param.setResult(response);
                         } catch (IOException ignored) {
                         }
