@@ -34,6 +34,10 @@ public class RedDot implements IHook {
 
     @Override
     public void init(ClassLoader classLoader) throws Throwable {
+        if (!Helper.prefs.getBoolean("switch_mainswitch", false)
+                || !Helper.prefs.getBoolean("switch_reddot", false))
+            return;
+
         FeedsTabsFragment = classLoader.loadClass("com.zhihu.android.app.feed.ui.fragment.FeedsTabsFragment");
         Class<?> ZHMainTabLayout = classLoader.loadClass("com.zhihu.android.app.ui.widget.ZHMainTabLayout");
         Class<?> BottomNavMenuItemView = classLoader.loadClass("com.zhihu.android.bottomnav.core.BottomNavMenuItemView");
