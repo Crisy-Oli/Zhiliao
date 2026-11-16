@@ -24,6 +24,10 @@ public class Article implements IHook {
 
     @Override
     public void init(ClassLoader classLoader) throws Throwable {
+        if (!Helper.prefs.getBoolean("switch_mainswitch", false)
+                || !Helper.prefs.getBoolean("switch_article", false))
+            return;
+
         if (Helper.versionCode > 2614) {
             try {
                 ContentMixAdapter = classLoader.loadClass("com.zhihu.android.mix.a.a");
