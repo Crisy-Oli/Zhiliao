@@ -42,6 +42,16 @@ jobs:
           fi
       - name: Build with Gradle
         run: bash ./gradlew -PappVerName=${{ env.VERSION }} assembleRelease
+      - name: Verify Xposed APK contents
+        run: |
+          APK=$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -type f -print -quit)
+          test -n "$APK" && test -s "$APK"
+          unzip -t "$APK" > /dev/null
+          unzip -Z1 "$APK" | grep -qx 'classes.dex'
+          unzip -Z1 "$APK" | grep -qx 'assets/xposed_init'
+          unzip -Z1 "$APK" | grep -qx 'lib/arm64-v8a/libzhiliao.so'
+          unzip -Z1 "$APK" | grep -qx 'lib/armeabi-v7a/libzhiliao.so'
+          test "$(unzip -p "$APK" assets/xposed_init | tr -d '\r\n')" = "com.shatyuka.zhiliao.MainHook"
       - name: Upload built apk
         if: success()
         uses: actions/upload-artifact@v4
