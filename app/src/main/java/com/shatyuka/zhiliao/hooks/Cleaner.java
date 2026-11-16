@@ -1,6 +1,8 @@
 package com.shatyuka.zhiliao.hooks;
 
 import android.annotation.SuppressLint;
+import android.os.Handler;
+import android.os.Looper;
 import android.widget.Toast;
 import com.shatyuka.zhiliao.Helper;
 import java.io.File;
@@ -70,7 +72,8 @@ public class Cleaner implements IHook {
     }
 
     public static File[] getCacheFiles() {
-        return Helper.context.getFilesDir().listFiles(new Filter());
+        File[] files = Helper.context.getFilesDir().listFiles(new Filter());
+        return files == null ? new File[0] : files;
     }
 
     @SuppressWarnings("ResultOfMethodCallIgnored")
@@ -80,12 +83,10 @@ public class Cleaner implements IHook {
         for (File file: files) {
             try {
                 long fileSize = getFileSize(file);
-                if (file.isDirectory()) {
-                    Helper.deleteDirectory(file);
-                } else {
-                    file.delete();
-                }
-                size += fileSize;
+                boolean deleted = file.isDirectory()
+                        ? Helper.deleteDirectory(file) : file.delete();
+                if (deleted)
+                    size += fileSize;
             } catch (Exception ignored) {
             }
         }
@@ -94,11 +95,19 @@ public class Cleaner implements IHook {
 
     @Override
     public void init(ClassLoader classLoader) throws Throwable {
-        if (Helper.prefs.getBoolean("switch_mainswitch", false) && Helper.prefs.getBoolean("switch_autoclean", false)) {
-            String size = Cleaner.humanReadableByteCount(Cleaner.doClean());
-            if (!Helper.prefs.getBoolean("switch_silenceclean", false)) {
-                Toast.makeText(Helper.context, "共清理 " + size + " 临时文件", Toast.LENGTH_SHORT).show();
-            }
+        if (Helper.prefs.getBoolean("switch_mainswitch", false)
+                && Helper.prefs.getBoolean("switch_autoclean", false)) {
+            // Recursive file scans can stall the UI during Zhihu startup.
+            // Cache cleanup is opt-in; run the I/O off the main thread.
+            new Thread(() -> {
+                long cleared = Cleaner.doClean();
+                if (!Helper.prefs.getBoolean("switch_silenceclean", false)) {
+                    String size = Cleaner.humanReadableByteCount(cleared);
+                    new Handler(Looper.getMainLooper()).post(() ->
+                            Toast.makeText(Helper.context,
+                                    "共清理 " + size + " 临时文件", Toast.LENGTH_SHORT).show());
+                }
+            }, "Zhiliao-CacheCleaner").start();
         }
     }
 
