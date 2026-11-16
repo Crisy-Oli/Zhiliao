@@ -124,6 +124,14 @@ public class CustomFilter implements IHook {
                 boolean checkMarket = Helper.prefs.getBoolean("switch_marketcard", false);
                 if (!checkCards && !checkMarket)
                     return;
+                // Common case: only the default sponsored-card filter is enabled.
+                // Avoid reading titles, authors and nested content unnecessarily.
+                boolean typeOnly = checkCards
+                        && !Helper.prefs.getBoolean("switch_video", false)
+                        && !Helper.prefs.getBoolean("switch_removearticle", false)
+                        && !Helper.prefs.getBoolean("switch_pin", false)
+                        && Helper.regex_title == null && Helper.regex_author == null
+                        && Helper.regex_content == null;
 
                 Object result = param.getResult();
                 if (result == null)
@@ -132,6 +140,11 @@ public class CustomFilter implements IHook {
                 if (checkCards && ApiTemplateRoot.isInstance(result)) {
                     Object extra = read(ApiTemplateRoot_extra, result);
                     String type = readText(Helper.DataUnique_type, extra);
+                    if (typeOnly) {
+                        if ("SvipActivity".equals(type))
+                            param.setResult(null);
+                        return;
+                    }
                     Object card = read(ApiTemplateRoot_common_card, result);
                     Object feed = read(ApiFeedCard_feed_content, card);
 
@@ -155,6 +168,11 @@ public class CustomFilter implements IHook {
                 } else if (checkCards && Card != null && Card.isInstance(result)) {
                     String type = readText(Card_Extra_contentType,
                             read(Card_extra, result));
+                    if (typeOnly) {
+                        if ("SvipActivity".equals(type))
+                            param.setResult(null);
+                        return;
+                    }
                     boolean hasVideo = false;
                     String title = null;
                     String author = null;
