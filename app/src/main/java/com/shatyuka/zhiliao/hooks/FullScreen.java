@@ -31,7 +31,7 @@ public class FullScreen implements IHook {
     @Override
     public void hook() throws Throwable {
         if (ClearScreenHelper_lambda != null) {
-            XposedHelpers.findAndHookMethod(ClearScreenHelper_lambda, "invoke", new XC_MethodHook() {
+            XC_MethodHook preventEnter = new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
                     if (Helper.prefs != null && Helper.prefs.getBoolean("switch_mainswitch", false)
@@ -39,7 +39,14 @@ public class FullScreen implements IHook {
                         param.setResult(null);
                     }
                 }
-            });
+            };
+            try {
+                // The Kotlin lambda's a() is void; intercept it rather than
+                // returning null from invoke() which normally yields Unit.INSTANCE.
+                XposedHelpers.findAndHookMethod(ClearScreenHelper_lambda, "a", preventEnter);
+            } catch (NoSuchMethodError ignored) {
+                XposedHelpers.findAndHookMethod(ClearScreenHelper_lambda, "invoke", preventEnter);
+            }
         }
     }
 }
