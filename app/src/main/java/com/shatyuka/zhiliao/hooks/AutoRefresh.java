@@ -5,6 +5,9 @@ import com.shatyuka.zhiliao.Helper;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.Collections;
+import java.util.Map;
+import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import de.robv.android.xposed.XC_MethodHook;
@@ -21,7 +24,10 @@ public class AutoRefresh implements IHook {
 
     static Field Params_nextUrl;
 
-    boolean refreshSucceed;
+    // Each FeedFragment has independent refresh state. A single global flag
+    // caused one feed tab to suppress another tab's successful refresh.
+    private final Map<Object, Boolean> refreshSucceededByFragment =
+            Collections.synchronizedMap(new WeakHashMap<>());
 
     @Override
     public String getName() {
@@ -150,7 +156,7 @@ public class AutoRefresh implements IHook {
                 XposedBridge.hookMethod(ui2_refreshWithType, new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) {
-                        refreshSucceed = false;
+                        refreshSucceededByFragment.remove(param.thisObject);
                     }
                 });
             }
@@ -158,10 +164,8 @@ public class AutoRefresh implements IHook {
                 XposedBridge.hookMethod(ui2_postRefreshSucceed, new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                        if (refreshSucceed) {
+                        if (Boolean.TRUE.equals(refreshSucceededByFragment.put(param.thisObject, true))) {
                             param.setResult(null);
-                        } else {
-                            refreshSucceed = true;
                         }
                     }
                 });
