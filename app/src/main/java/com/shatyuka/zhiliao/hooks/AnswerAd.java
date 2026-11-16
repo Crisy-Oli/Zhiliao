@@ -8,6 +8,7 @@ import com.shatyuka.zhiliao.Helper;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.List;
 
 import de.robv.android.xposed.XC_MethodHook;
@@ -26,10 +27,20 @@ public class AnswerAd implements IHook {
         Class<?> AppView = classLoader.loadClass("com.zhihu.android.answer.module.content.appview.AnswerAppView").getSuperclass();
         if (AppView == null)
             throw new ClassNotFoundException("com.zhihu.android.appview.AppView");
+        shouldInterceptRequest = null;
         Helper.findClass(classLoader, AppView.getName() + "$",
                 (Class<?> ZhihuWebViewClient) -> {
-                    shouldInterceptRequest = Helper.getMethodByParameterTypes(ZhihuWebViewClient, Helper.IZhihuWebView, WebResourceRequest.class);
-                    return shouldInterceptRequest != null;
+                    for (Method method : ZhihuWebViewClient.getDeclaredMethods()) {
+                        // The 11.16.0 client has both response-returning and boolean
+                        // methods with identical argument types. Only hook the former.
+                        if (method.getReturnType() == WebResourceResponse.class &&
+                                Arrays.equals(method.getParameterTypes(),
+                                        new Class<?>[]{Helper.IZhihuWebView, WebResourceRequest.class})) {
+                            shouldInterceptRequest = method;
+                            return true;
+                        }
+                    }
+                    return false;
                 });
         if (shouldInterceptRequest == null)
             throw new NoSuchMethodException("com.zhihu.android.appview.AppView$ZhihuWebViewClient.shouldInterceptRequest(IZhihuWebView, WebResourceRequest)");
@@ -43,16 +54,26 @@ public class AnswerAd implements IHook {
                 if (!Helper.prefs.getBoolean("switch_mainswitch", false))
                     return;
                 WebResourceRequest request = (WebResourceRequest) param.args[1];
+                if (request == null || !"GET".equals(request.getMethod()))
+                    return;
                 List<String> segments = request.getUrl().getPathSegments();
-                if (segments.size() > 2 && request.getMethod().equals("GET")
-                        && ((Helper.prefs.getBoolean("switch_answerad", true) && (segments.get(segments.size() - 1).equals("recommendations")
-                        || (segments.get(2).equals("brand") && segments.get(segments.size() - 1).equals("card")))
-                        || segments.get(segments.size() - 2).equals("hotmodule"))
-                        || (Helper.prefs.getBoolean("switch_club", false) && segments.get(segments.size() - 1).equals("bind_club"))
-                        || (Helper.prefs.getBoolean("switch_goods", false) && segments.get(segments.size() - 2).equals("goods"))
-                        || (Helper.prefs.getBoolean("switch_article", false) && segments.get(segments.size() - 1).equals("recommendation"))
-                        || (Helper.prefs.getBoolean("switch_related", false) && segments.get(segments.size() - 3).equals("related_queries")))
-                        || (Helper.prefs.getBoolean("switch_searchwords", false) && segments.get(segments.size() - 1).equals("entity_word"))) {
+                int count = segments.size();
+                if (count == 0)
+                    return;
+
+                boolean blockAnswerModules = count > 2 && (
+                        (Helper.prefs.getBoolean("switch_answerad", true) &&
+                                (segments.get(count - 1).equals("recommendations") ||
+                                        (segments.get(2).equals("brand") && segments.get(count - 1).equals("card"))))
+                        || segments.get(count - 2).equals("hotmodule")
+                        || (Helper.prefs.getBoolean("switch_club", false) && segments.get(count - 1).equals("bind_club"))
+                        || (Helper.prefs.getBoolean("switch_goods", false) && segments.get(count - 2).equals("goods"))
+                        || (Helper.prefs.getBoolean("switch_article", false) && segments.get(count - 1).equals("recommendation"))
+                        || (Helper.prefs.getBoolean("switch_related", false) && segments.get(count - 3).equals("related_queries")));
+                boolean blockSearchWords = Helper.prefs.getBoolean("switch_searchwords", false)
+                        && segments.get(count - 1).equals("entity_word");
+
+                if (blockAnswerModules || blockSearchWords) {
                     WebResourceResponse response = new WebResourceResponse("application/json", "UTF-8", new ByteArrayInputStream("{}".getBytes()));
                     response.setStatusCodeAndReasonPhrase(200, "OK");
                     param.setResult(response);
@@ -65,10 +86,14 @@ public class AnswerAd implements IHook {
                 if (!Helper.prefs.getBoolean("switch_mainswitch", false))
                     return;
                 WebResourceRequest request = (WebResourceRequest) param.args[1];
+                if (request == null || !"GET".equals(request.getMethod()))
+                    return;
                 List<String> segments = request.getUrl().getPathSegments();
-                if (segments.size() > 2 && request.getMethod().equals("GET")) {
+                if (segments.size() > 2) {
                     if (Helper.prefs.getBoolean("switch_searchwords", false) && segments.get(0).equals("appview") && segments.get(segments.size() - 2).equals("answer")) {
                         WebResourceResponse response = (WebResourceResponse) param.getResult();
+                        if (response == null || response.getData() == null)
+                            return;
                         try {
                             int available = response.getData().available();
                             if (available == 0) {
