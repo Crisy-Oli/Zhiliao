@@ -2,7 +2,7 @@ name: Android CI
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, 'dev/zhihu-hook-maintenance' ]
 
 jobs:
   build:
@@ -44,6 +44,7 @@ jobs:
           name: Zhiliao_${{ env.VERSION }}
           path: ${{ github.workspace }}/app/build/outputs/apk/release
       - name: Send commit to telegram
+        if: github.ref == 'refs/heads/master'
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_TO }}
