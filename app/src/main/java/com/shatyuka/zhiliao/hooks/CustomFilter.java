@@ -114,11 +114,22 @@ public class CustomFilter implements IHook {
             protected void afterHookedMethod(MethodHookParam param) {
                 if (!Helper.prefs.getBoolean("switch_mainswitch", false))
                     return;
+
+                boolean checkCards = Helper.prefs.getBoolean("switch_video", false)
+                        || Helper.prefs.getBoolean("switch_removearticle", false)
+                        || Helper.prefs.getBoolean("switch_pin", false)
+                        || Helper.prefs.getBoolean("switch_feedad", true)
+                        || Helper.regex_title != null || Helper.regex_author != null
+                        || Helper.regex_content != null;
+                boolean checkMarket = Helper.prefs.getBoolean("switch_marketcard", false);
+                if (!checkCards && !checkMarket)
+                    return;
+
                 Object result = param.getResult();
                 if (result == null)
                     return;
 
-                if (ApiTemplateRoot.isInstance(result)) {
+                if (checkCards && ApiTemplateRoot.isInstance(result)) {
                     Object extra = read(ApiTemplateRoot_extra, result);
                     String type = readText(Helper.DataUnique_type, extra);
                     Object card = read(ApiTemplateRoot_common_card, result);
@@ -141,7 +152,7 @@ public class CustomFilter implements IHook {
                     }
                     if (filter(type, hasVideo, title, author, content))
                         param.setResult(null);
-                } else if (Card != null && Card.isInstance(result)) {
+                } else if (checkCards && Card != null && Card.isInstance(result)) {
                     String type = readText(Card_Extra_contentType,
                             read(Card_extra, result));
                     boolean hasVideo = false;
@@ -187,8 +198,7 @@ public class CustomFilter implements IHook {
                     }
                     if (filter(type, hasVideo, title, author, content))
                         param.setResult(null);
-                } else if (MarketCard.isInstance(result)
-                        && Helper.prefs.getBoolean("switch_marketcard", false)) {
+                } else if (checkMarket && MarketCard.isInstance(result)) {
                     param.setResult(null);
                 }
             }
