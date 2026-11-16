@@ -68,7 +68,10 @@ public class Article implements IHook {
                 XposedBridge.hookMethod(getItemCount, new XC_MethodHook() {
                     @Override
                     protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                        if (param.thisObject.getClass() == ContentMixAdapter && ContentMixPagerFragment_type.get(ContentMixAdapter_fragment.get(param.thisObject)) == "article")
+                        if (!ContentMixAdapter.isInstance(param.thisObject))
+                            return;
+                        Object fragment = ContentMixAdapter_fragment.get(param.thisObject);
+                        if (fragment != null && "article".equals(ContentMixPagerFragment_type.get(fragment)))
                             param.setResult(1);
                     }
                 });
