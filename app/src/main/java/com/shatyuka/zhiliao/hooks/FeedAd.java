@@ -5,6 +5,7 @@ import android.content.Context;
 import com.shatyuka.zhiliao.Helper;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.List;
 
 import de.robv.android.xposed.XC_MethodHook;
@@ -43,6 +44,23 @@ public class FeedAd implements IHook {
         FeedList_data = classLoader.loadClass("com.zhihu.android.api.model.FeedList").getField("data");
     }
 
+    private static List<?> withoutFeedAds(List<?> original) {
+        if (original == null || original.isEmpty())
+            return original;
+
+        ArrayList<Object> clean = null;
+        for (int i = 0; i < original.size(); i++) {
+            Object item = original.get(i);
+            if (item != null && FeedAdvert.isInstance(item)) {
+                if (clean == null)
+                    clean = new ArrayList<>(original.subList(0, i));
+            } else if (clean != null) {
+                clean.add(item);
+            }
+        }
+        return clean == null ? original : clean;
+    }
+
     @Override
     public void hook() throws Throwable {
         XposedBridge.hookAllMethods(BasePagingFragment, "postRefreshSucceed", new XC_MethodHook() {
@@ -51,14 +69,13 @@ public class FeedAd implements IHook {
                 if (Helper.prefs.getBoolean("switch_mainswitch", false) && Helper.prefs.getBoolean("switch_feedad", true)) {
                     if (param.args[0] == null)
                         return;
-                    List<?> list = (List<?>) FeedList_data.get(param.args[0]);
-                    if (list == null || list.isEmpty())
+                    Object raw = FeedList_data.get(param.args[0]);
+                    if (!(raw instanceof List))
                         return;
-                    for (int i = list.size() - 1; i >= 0; i--) {
-                        if (list.get(i).getClass() == FeedAdvert) {
-                            list.remove(i);
-                        }
-                    }
+                    List<?> original = (List<?>) raw;
+                    List<?> clean = withoutFeedAds(original);
+                    if (clean != original)
+                        FeedList_data.set(param.args[0], clean);
                 }
             }
         });
@@ -68,14 +85,12 @@ public class FeedAd implements IHook {
                 if (Helper.prefs.getBoolean("switch_mainswitch", false) && Helper.prefs.getBoolean("switch_feedad", true)) {
                     if (param.args[1] == null)
                         return;
-                    List<?> list = (List<?>) param.args[1];
-                    if (list.isEmpty())
+                    if (!(param.args[1] instanceof List))
                         return;
-                    for (int i = list.size() - 1; i >= 0; i--) {
-                        if (list.get(i).getClass() == FeedAdvert) {
-                            list.remove(i);
-                        }
-                    }
+                    List<?> original = (List<?>) param.args[1];
+                    List<?> clean = withoutFeedAds(original);
+                    if (clean != original)
+                        param.args[1] = clean;
                 }
             }
         });
